@@ -32,6 +32,10 @@ public partial class MainWindow : Window
     private bool _playbackLoopRunning;
     private bool _seekDragging;
     private bool _updatingSeekSlider;
+    private bool _updatingVolumeSlider;
+    /// <summary>볼륨(0~1)과 음소거 상태. 다른 파일을 열어도 유지된다.</summary>
+    private double _volume = 1;
+    private bool _muted;
 
     private bool IsConverting => _convertCts is not null;
 
@@ -52,6 +56,7 @@ public partial class MainWindow : Window
         SeekSlider.AddHandler(PointerCaptureLostEvent, (_, _) => EndSeekDrag(),
             RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
         SeekSlider.ValueChanged += OnSeekSliderValueChanged;
+        VolumeSlider.ValueChanged += OnVolumeSliderValueChanged;
     }
 
     // ───────────── 파일 불러오기 ─────────────
@@ -136,7 +141,8 @@ public partial class MainWindow : Window
         _media = info;
         if (thumbnail is not null)
         {
-            ShowBitmap(thumbnail);
+            // 영상은 불투명하므로 체커보드 없이, 창이 크면 확대해서 보여준다
+            ShowBitmap(thumbnail, isVideo: true);
         }
         else
         {
@@ -144,7 +150,8 @@ public partial class MainWindow : Window
             AudioPlaceholder.IsVisible = true;
         }
 
-        _player = new MediaPlayer(path, info);
+        // 볼륨/음소거는 파일을 바꿔도 유지
+        _player = new MediaPlayer(path, info) { Volume = _volume, IsMuted = _muted };
         SetupPlayerBar(_player);
 
         SaveAsMenuItem.IsEnabled = AvailableMediaExporters().Count > 0;
@@ -160,6 +167,7 @@ public partial class MainWindow : Window
         PlayerBar.IsVisible = true;
         PlayButton.IsEnabled = player.CanPlay;
         MuteButton.IsEnabled = _media?.HasAudio == true && player.IsAudioOutputAvailable;
+        VolumeSlider.IsEnabled = MuteButton.IsEnabled;
         SeekSlider.IsEnabled = player.CanPlay && player.Duration is not null;
         SeekSlider.Maximum = Math.Max(player.Duration?.TotalSeconds ?? 1, 0.001);
         UpdatePlayerBar();
@@ -193,8 +201,45 @@ public partial class MainWindow : Window
     {
         if (_player is null || !MuteButton.IsEnabled)
             return;
-        _player.IsMuted = !_player.IsMuted;
+        if (_muted || _volume == 0)
+        {
+            _muted = false;
+            // 볼륨 0에서 음소거를 풀면 여전히 들리지 않으므로 절반으로 되돌린다
+            if (_volume == 0)
+                _volume = 0.5;
+        }
+        else
+        {
+            _muted = true;
+        }
+        _player.Volume = _volume;
+        _player.IsMuted = _muted;
         UpdatePlayerBar();
+    }
+
+    private void SetVolume(double volume)
+    {
+        _volume = Math.Clamp(volume, 0, 1);
+        // 볼륨을 조절하면 음소거를 해제 (일반적인 플레이어 동작)
+        _muted = false;
+        if (_player is not null)
+        {
+            _player.Volume = _volume;
+            _player.IsMuted = false;
+        }
+        UpdatePlayerBar();
+    }
+
+    private void ChangeVolumeBy(double delta)
+    {
+        if (VolumeSlider.IsEnabled)
+            SetVolume(_volume + delta);
+    }
+
+    private void OnVolumeSliderValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (!_updatingVolumeSlider)
+            SetVolume(e.NewValue / 100);
     }
 
     /// <summary>재생 중(또는 탐색 후 첫 프레임 대기 중)일 때만 화면 갱신마다 Tick을 호출한다.</summary>
@@ -220,6 +265,8 @@ public partial class MainWindow : Window
             {
                 // 첫 프레임이 나오면 썸네일 대신 재생기 비트맵을 표시
                 PreviewImage.Source = player.Frame;
+                PreviewBackground.Background = null;
+                PreviewFrame.StretchDirection = StretchDirection.Both;
                 PreviewFrame.IsVisible = true;
                 _showingPlayerFrame = true;
             }
@@ -239,7 +286,11 @@ public partial class MainWindow : Window
             return;
 
         PlayIcon.Data = (Geometry)Resources[player.IsPlaying ? "PauseGeometry" : "PlayGeometry"]!;
-        MuteIcon.Data = (Geometry)Resources[player.IsMuted ? "MutedGeometry" : "VolumeGeometry"]!;
+        var silent = _muted || _volume == 0;
+        MuteIcon.Data = (Geometry)Resources[silent ? "MutedGeometry" : "VolumeGeometry"]!;
+        _updatingVolumeSlider = true;
+        VolumeSlider.Value = _muted ? 0 : _volume * 100;
+        _updatingVolumeSlider = false;
 
         // 드래그 중에는 슬라이더 위치의 시간을 미리 보여준다
         var shown = _seekDragging ? TimeSpan.FromSeconds(SeekSlider.Value) : player.Position;
@@ -490,6 +541,8 @@ public partial class MainWindow : Window
                 case Key.Left: SeekBy(-5); break;
                 case Key.Right: SeekBy(5); break;
                 case Key.M: ToggleMute(); break;
+                case Key.Up: ChangeVolumeBy(0.1); break;
+                case Key.Down: ChangeVolumeBy(-0.1); break;
                 default: return;
             }
             e.Handled = true;
@@ -519,10 +572,12 @@ public partial class MainWindow : Window
 
     // ───────────── 화면 상태 ─────────────
 
-    private void ShowBitmap(Bitmap bitmap)
+    private void ShowBitmap(Bitmap bitmap, bool isVideo = false)
     {
         _bitmap = bitmap;
         PreviewImage.Source = bitmap;
+        PreviewBackground.Background = isVideo ? null : (IBrush)Resources["CheckerBrush"]!;
+        PreviewFrame.StretchDirection = isVideo ? StretchDirection.Both : StretchDirection.DownOnly;
         PreviewFrame.IsVisible = true;
         Placeholder.IsVisible = false;
     }

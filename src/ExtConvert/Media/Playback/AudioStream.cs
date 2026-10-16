@@ -127,10 +127,11 @@ internal sealed class AudioStream : IDisposable
             _device.Al.SourcePause(_source);
     }
 
-    public void SetMuted(bool muted)
+    /// <summary>출력 음량 (0 = 무음, 1 = 원본).</summary>
+    public void SetGain(float gain)
     {
         lock (_device.Sync)
-            _device.Al.SetSourceProperty(_source, SourceFloat.Gain, muted ? 0f : 1f);
+            _device.Al.SetSourceProperty(_source, SourceFloat.Gain, Math.Clamp(gain, 0f, 1f));
     }
 
     private void Run()

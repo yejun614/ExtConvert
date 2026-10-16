@@ -70,12 +70,15 @@
       <TextBlock x:Name="UnsupportedText" IsVisible="False" TextWrapping="Wrap" TextAlignment="Center"
                  HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16" />
 
-      <Border x:Name="PreviewFrame" IsVisible="False" Margin="12"
-              HorizontalAlignment="Center" VerticalAlignment="Center"
-              Background="{StaticResource CheckerBrush}">
-        <Image x:Name="PreviewImage" Stretch="Uniform" StretchDirection="DownOnly"
-               RenderOptions.BitmapInterpolationMode="HighQuality" />
-      </Border>
+      <!-- 배경과 이미지를 원본 크기로 배치한 뒤 Viewbox가 통째로 확대/축소한다.
+           (Border 안에서 Image만 Uniform으로 맞추면 레이아웃 반올림 때문에 가장자리에 1px 틈이 생김) -->
+      <Viewbox x:Name="PreviewFrame" IsVisible="False" Margin="12"
+               Stretch="Uniform" StretchDirection="DownOnly">
+        <Border x:Name="PreviewBackground" Background="{StaticResource CheckerBrush}">
+          <Image x:Name="PreviewImage" Stretch="Fill"
+                 RenderOptions.BitmapInterpolationMode="HighQuality" />
+        </Border>
+      </Viewbox>
     </Panel>
 
     <!-- 동영상/오디오 재생 컨트롤 -->
@@ -89,10 +92,14 @@
                  FontSize="12" Text="00:00 / 00:00" />
       <Slider x:Name="SeekSlider" Grid.Column="2" Minimum="0" Maximum="1" Focusable="False"
               VerticalAlignment="Center" Margin="0,-8" />
-      <Button x:Name="MuteButton" Grid.Column="3" Click="OnMuteClick" Focusable="False" Padding="8,6"
-              Margin="8,0,0,0" ToolTip.Tip="소리 끄기 / 켜기 (M)">
-        <PathIcon x:Name="MuteIcon" Width="14" Height="12" Data="{StaticResource VolumeGeometry}" />
-      </Button>
+      <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="8,0,0,0">
+        <Button x:Name="MuteButton" Click="OnMuteClick" Focusable="False" Padding="8,6"
+                ToolTip.Tip="소리 끄기 / 켜기 (M)">
+          <PathIcon x:Name="MuteIcon" Width="14" Height="12" Data="{StaticResource VolumeGeometry}" />
+        </Button>
+        <Slider x:Name="VolumeSlider" Width="72" Minimum="0" Maximum="100" Value="100" Focusable="False"
+                VerticalAlignment="Center" Margin="6,-8,0,-8" ToolTip.Tip="볼륨 (↑/↓)" />
+      </StackPanel>
     </Grid>
     </Grid>
   </DockPanel>

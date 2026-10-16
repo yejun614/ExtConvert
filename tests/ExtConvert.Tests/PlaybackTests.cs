@@ -103,6 +103,28 @@ public class PlaybackTests(MediaFixture fx) : IClassFixture<MediaFixture>
     }
 
     [AvaloniaFact]
+    public async Task Volume_IsClampedAndCanChangeDuringPlayback()
+    {
+        RequireFFmpeg();
+        using var player = await OpenAsync(fx.VideoWithAudio);
+
+        player.Volume = 1.5;
+        Assert.Equal(1, player.Volume);
+        player.Volume = -1;
+        Assert.Equal(0, player.Volume);
+
+        player.Play();
+        await RunTicksAsync(player, TimeSpan.FromSeconds(0.3));
+        player.Volume = 0.4;
+        player.IsMuted = true;
+        player.IsMuted = false;
+        await RunTicksAsync(player, TimeSpan.FromSeconds(0.3));
+
+        Assert.Equal(0.4, player.Volume);
+        Assert.True(player.IsPlaying);
+    }
+
+    [AvaloniaFact]
     public async Task VideoWithoutAudio_PlaysOnWallClock()
     {
         RequireFFmpeg();

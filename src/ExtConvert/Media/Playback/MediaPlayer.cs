@@ -27,6 +27,7 @@ public sealed class MediaPlayer : IDisposable
     private TimeSpan _position;
     private bool _playing;
     private bool _muted;
+    private double _volume = 1;
 
     public MediaPlayer(string path, MediaInfo info)
     {
@@ -73,9 +74,25 @@ public sealed class MediaPlayer : IDisposable
         set
         {
             _muted = value;
-            _session?.Audio?.SetMuted(value);
+            ApplyGain();
         }
     }
+
+    /// <summary>볼륨 0~1. 음소거와는 별개로 유지된다.</summary>
+    public double Volume
+    {
+        get => _volume;
+        set
+        {
+            _volume = Math.Clamp(value, 0, 1);
+            ApplyGain();
+        }
+    }
+
+    // 사람 귀는 음량을 로그적으로 느끼므로 제곱 곡선을 써야 슬라이더 중간이 "절반 정도"로 들린다
+    private float EffectiveGain => _muted ? 0f : (float)(_volume * _volume);
+
+    private void ApplyGain() => _session?.Audio?.SetGain(EffectiveGain);
 
     public void Play()
     {
@@ -195,7 +212,7 @@ public sealed class MediaPlayer : IDisposable
                 "pipe:1",
             ]);
             audio = new AudioStream(device, audioProc.StandardOutput.BaseStream);
-            audio.SetMuted(_muted);
+            audio.SetGain(EffectiveGain);
         }
 
         return new Session(start, videoProc, audioProc, video, audio);
