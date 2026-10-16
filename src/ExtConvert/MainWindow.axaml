@@ -1,0 +1,75 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ExtConvert.MainWindow"
+        Title="Ext Convert"
+        Width="480" Height="420"
+        MinWidth="320" MinHeight="280"
+        WindowStartupLocation="CenterScreen"
+        DragDrop.AllowDrop="True">
+
+  <Window.Resources>
+    <!-- 투명 영역을 보여주기 위한 체커보드 배경 -->
+    <DrawingBrush x:Key="CheckerBrush" TileMode="Tile" DestinationRect="0,0,16,16">
+      <DrawingBrush.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="#FFFFFF" Geometry="M0,0 H16 V16 H0 Z" />
+          <GeometryDrawing Brush="#E0E0E0" Geometry="M0,0 H8 V8 H0 Z M8,8 H16 V16 H8 Z" />
+        </DrawingGroup>
+      </DrawingBrush.Drawing>
+    </DrawingBrush>
+  </Window.Resources>
+
+  <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="파일(_F)">
+        <MenuItem x:Name="OpenMenuItem" Header="열기(_O)..." InputGesture="Ctrl+O" Click="OnOpenClick" />
+        <MenuItem x:Name="SaveAsMenuItem" Header="다른 이름으로 저장(_A)..."
+                  InputGesture="Ctrl+Shift+S" Click="OnSaveAsClick" IsEnabled="False" />
+        <Separator />
+        <MenuItem x:Name="CloseFileMenuItem" Header="닫기(_C)" Click="OnCloseFileClick" />
+        <MenuItem Header="끝내기(_X)" Click="OnExitClick" />
+      </MenuItem>
+    </Menu>
+
+    <Border DockPanel.Dock="Bottom" Padding="10,4"
+            Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBlock x:Name="StatusText" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                   Text="파일을 끌어다 놓거나 [파일 &gt; 열기]로 선택하세요." />
+        <ProgressBar x:Name="ConvertProgress" Grid.Column="1" Width="120" Minimum="0" Maximum="1"
+                     Margin="8,0" VerticalAlignment="Center" IsVisible="False" />
+        <Button x:Name="CancelConvertButton" Grid.Column="2" Content="취소" FontSize="12" Padding="10,1"
+                IsVisible="False" Click="OnCancelConvertClick" />
+      </Grid>
+    </Border>
+
+    <Panel x:Name="DropArea" Margin="12" Background="Transparent" Cursor="Hand"
+           PointerPressed="OnDropAreaPressed">
+      <Rectangle x:Name="DropBorder" StrokeThickness="2" StrokeDashArray="4,3"
+                 Stroke="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                 RadiusX="8" RadiusY="8" />
+
+      <StackPanel x:Name="Placeholder" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+        <TextBlock Text="⬇" FontSize="36" HorizontalAlignment="Center" Opacity="0.5" />
+        <TextBlock Text="여기에 파일을 끌어다 놓으세요" HorizontalAlignment="Center" />
+        <TextBlock Text="또는 클릭해서 파일 선택" HorizontalAlignment="Center" FontSize="12" Opacity="0.6" />
+      </StackPanel>
+
+      <StackPanel x:Name="AudioPlaceholder" IsVisible="False" Spacing="8"
+                  HorizontalAlignment="Center" VerticalAlignment="Center">
+        <TextBlock Text="♪" FontSize="64" HorizontalAlignment="Center" Opacity="0.6" />
+        <TextBlock x:Name="AudioNameText" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      </StackPanel>
+
+      <TextBlock x:Name="UnsupportedText" IsVisible="False" TextWrapping="Wrap" TextAlignment="Center"
+                 HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16" />
+
+      <Border x:Name="PreviewFrame" IsVisible="False" Margin="12"
+              HorizontalAlignment="Center" VerticalAlignment="Center"
+              Background="{StaticResource CheckerBrush}">
+        <Image x:Name="PreviewImage" Stretch="Uniform" StretchDirection="DownOnly"
+               RenderOptions.BitmapInterpolationMode="HighQuality" />
+      </Border>
+    </Panel>
+  </DockPanel>
+</Window>
