@@ -17,6 +17,11 @@
         </DrawingGroup>
       </DrawingBrush.Drawing>
     </DrawingBrush>
+
+    <StreamGeometry x:Key="PlayGeometry">M0,0 L10,6 L0,12 Z</StreamGeometry>
+    <StreamGeometry x:Key="PauseGeometry">M0,0 H3.5 V12 H0 Z M6.5,0 H10 V12 H6.5 Z</StreamGeometry>
+    <StreamGeometry x:Key="VolumeGeometry">M0,4 H3 L7,0 V12 L3,8 H0 Z M9,4.5 H10.2 V7.5 H9 Z M11.5,2.5 H12.7 V9.5 H11.5 Z</StreamGeometry>
+    <StreamGeometry x:Key="MutedGeometry">M0,4 H3 L7,0 V12 L3,8 H0 Z M8.6,4.4 L9.4,3.6 L14,8.2 L13.2,9 Z M8.6,8.2 L13.2,3.6 L14,4.4 L9.4,9 Z</StreamGeometry>
   </Window.Resources>
 
   <DockPanel>
@@ -43,6 +48,7 @@
       </Grid>
     </Border>
 
+    <Grid RowDefinitions="*,Auto">
     <Panel x:Name="DropArea" Margin="12" Background="Transparent" Cursor="Hand"
            PointerPressed="OnDropAreaPressed">
       <Rectangle x:Name="DropBorder" StrokeThickness="2" StrokeDashArray="4,3"
@@ -71,5 +77,23 @@
                RenderOptions.BitmapInterpolationMode="HighQuality" />
       </Border>
     </Panel>
+
+    <!-- 동영상/오디오 재생 컨트롤 -->
+    <Grid x:Name="PlayerBar" Grid.Row="1" IsVisible="False" Margin="12,0,12,8"
+          ColumnDefinitions="Auto,Auto,*,Auto">
+      <Button x:Name="PlayButton" Click="OnPlayClick" Focusable="False" Padding="10,6"
+              ToolTip.Tip="재생 / 일시정지 (Space)">
+        <PathIcon x:Name="PlayIcon" Width="12" Height="12" Data="{StaticResource PlayGeometry}" />
+      </Button>
+      <TextBlock x:Name="TimeText" Grid.Column="1" Margin="10,0" VerticalAlignment="Center"
+                 FontSize="12" Text="00:00 / 00:00" />
+      <Slider x:Name="SeekSlider" Grid.Column="2" Minimum="0" Maximum="1" Focusable="False"
+              VerticalAlignment="Center" Margin="0,-8" />
+      <Button x:Name="MuteButton" Grid.Column="3" Click="OnMuteClick" Focusable="False" Padding="8,6"
+              Margin="8,0,0,0" ToolTip.Tip="소리 끄기 / 켜기 (M)">
+        <PathIcon x:Name="MuteIcon" Width="14" Height="12" Data="{StaticResource VolumeGeometry}" />
+      </Button>
+    </Grid>
+    </Grid>
   </DockPanel>
 </Window>

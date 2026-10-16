@@ -7,6 +7,8 @@
 - 파일을 창에 **드래그 앤 드롭**하거나, 빈 영역 클릭 / `파일 > 열기` (Ctrl+O)로 선택
 - 이미지 미리보기 (PNG, JPG, BMP, GIF, WebP, ICO) — 투명 영역은 체커보드로 표시
 - 동영상/오디오 미리보기 (MP4, MOV, MKV, WebM, AVI, MP3, M4A, WAV, FLAC 등, FFmpeg 필요) — 동영상은 썸네일, 상태바에 길이·해상도·코덱 표시
+- **동영상/오디오 재생**: 재생/일시정지, 탐색 바, 시간 표시, 음소거 — FFmpeg 디코딩 + OpenAL Soft 출력, 오디오 기준 립싱크
+  - 단축키: `Space` 재생/일시정지 · `←`/`→` 5초 이동 · `M` 음소거 · 미리보기 클릭으로 재생/일시정지
 - `파일 > 다른 이름으로 저장` (Ctrl+Shift+S)으로 형식 변환
   - **ICO**: 16~256px 중 원하는 크기를 골라 한 파일에 담음 (PNG 압축 엔트리, Vista 이후 표준). 정사각형이 아니면 비율 유지 + 투명 여백
   - **PNG**
@@ -24,6 +26,8 @@
 4. macOS `/opt/homebrew/bin`, `/usr/local/bin` / Linux `/usr/bin`, `/snap/bin`
 
 설치: Windows `winget install Gyan.FFmpeg` · macOS `brew install ffmpeg` · Linux `sudo apt install ffmpeg`
+
+소리 출력은 OpenAL Soft를 사용합니다 (`Silk.NET.OpenAL.Soft.Native` 패키지에 Windows/macOS/Linux용 네이티브 라이브러리가 포함되어 별도 설치 불필요).
 
 ## 빌드 / 실행
 
@@ -60,6 +64,10 @@ src/ExtConvert/
     MediaInfo.cs              ffprobe JSON 해석
     IMediaExporter.cs         FFmpeg 변환기 인터페이스 + MediaExportOptions
     Mp3Exporter.cs
+    Playback/
+      MediaPlayer.cs          재생/일시정지/탐색, 오디오 시계 기준 프레임 선택
+      VideoStream.cs          ffmpeg rawvideo(BGRA) 프레임 큐
+      AudioStream.cs          ffmpeg PCM → OpenAL 스트리밍 버퍼
 tests/ExtConvert.Tests/       Avalonia.Headless 기반 변환 테스트 (미디어 테스트는 ffmpeg가 없으면 건너뜀)
 ```
 

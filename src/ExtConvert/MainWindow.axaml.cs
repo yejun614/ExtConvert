@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -7,6 +8,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using ExtConvert.Conversion;
 using ExtConvert.Media;
+using ExtConvert.Media.Playback;
 using Path = System.IO.Path;
 
 namespace ExtConvert;
@@ -24,6 +26,13 @@ public partial class MainWindow : Window
     /// <summary>파일을 연달아 열 때 늦게 끝난 이전 로드 결과를 버리기 위한 번호.</summary>
     private int _loadVersion;
 
+    private MediaPlayer? _player;
+    /// <summary>화면에 썸네일 대신 재생기 프레임을 표시 중인지.</summary>
+    private bool _showingPlayerFrame;
+    private bool _playbackLoopRunning;
+    private bool _seekDragging;
+    private bool _updatingSeekSlider;
+
     private bool IsConverting => _convertCts is not null;
 
     public MainWindow()
@@ -34,6 +43,15 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         AddHandler(DragDrop.DropEvent, OnDrop);
+
+        // 슬라이더 썸이 이벤트를 처리하므로 Tunnel + handledEventsToo로 드래그 시작/끝을 감지
+        SeekSlider.AddHandler(PointerPressedEvent, (_, _) => _seekDragging = true,
+            RoutingStrategies.Tunnel, handledEventsToo: true);
+        SeekSlider.AddHandler(PointerReleasedEvent, (_, _) => EndSeekDrag(),
+            RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+        SeekSlider.AddHandler(PointerCaptureLostEvent, (_, _) => EndSeekDrag(),
+            RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+        SeekSlider.ValueChanged += OnSeekSliderValueChanged;
     }
 
     // ───────────── 파일 불러오기 ─────────────
@@ -126,10 +144,135 @@ public partial class MainWindow : Window
             AudioPlaceholder.IsVisible = true;
         }
 
+        _player = new MediaPlayer(path, info);
+        SetupPlayerBar(_player);
+
         SaveAsMenuItem.IsEnabled = AvailableMediaExporters().Count > 0;
         SetStatus($"{name}  ·  {info.Summary()}  ·  {FormatFileSize(path)}"
-                  + (info.HasAudio ? "" : "  ·  오디오 트랙 없음"));
+                  + (info.HasAudio ? "" : "  ·  오디오 트랙 없음")
+                  + (_player.IsAudioOutputAvailable ? "" : "  ·  오디오 출력 장치를 사용할 수 없음"));
     }
+
+    // ───────────── 재생 ─────────────
+
+    private void SetupPlayerBar(MediaPlayer player)
+    {
+        PlayerBar.IsVisible = true;
+        PlayButton.IsEnabled = player.CanPlay;
+        MuteButton.IsEnabled = _media?.HasAudio == true && player.IsAudioOutputAvailable;
+        SeekSlider.IsEnabled = player.CanPlay && player.Duration is not null;
+        SeekSlider.Maximum = Math.Max(player.Duration?.TotalSeconds ?? 1, 0.001);
+        UpdatePlayerBar();
+    }
+
+    private void TogglePlay()
+    {
+        if (_player is not { CanPlay: true } player)
+            return;
+        player.TogglePlay();
+        EnsurePlaybackLoop();
+        UpdatePlayerBar();
+    }
+
+    private void SeekTo(TimeSpan position)
+    {
+        if (_player is not { CanPlay: true } player)
+            return;
+        player.Seek(position);
+        EnsurePlaybackLoop();
+        UpdatePlayerBar();
+    }
+
+    private void SeekBy(double seconds)
+    {
+        if (_player is not null)
+            SeekTo(_player.Position + TimeSpan.FromSeconds(seconds));
+    }
+
+    private void ToggleMute()
+    {
+        if (_player is null || !MuteButton.IsEnabled)
+            return;
+        _player.IsMuted = !_player.IsMuted;
+        UpdatePlayerBar();
+    }
+
+    /// <summary>재생 중(또는 탐색 후 첫 프레임 대기 중)일 때만 화면 갱신마다 Tick을 호출한다.</summary>
+    private void EnsurePlaybackLoop()
+    {
+        if (_playbackLoopRunning || _player is null)
+            return;
+        _playbackLoopRunning = true;
+        RequestAnimationFrame(OnPlaybackFrame);
+    }
+
+    private void OnPlaybackFrame(TimeSpan _)
+    {
+        if (_player is not { } player)
+        {
+            _playbackLoopRunning = false;
+            return;
+        }
+
+        if (player.Tick())
+        {
+            if (!_showingPlayerFrame)
+            {
+                // 첫 프레임이 나오면 썸네일 대신 재생기 비트맵을 표시
+                PreviewImage.Source = player.Frame;
+                PreviewFrame.IsVisible = true;
+                _showingPlayerFrame = true;
+            }
+            PreviewImage.InvalidateVisual();
+        }
+        UpdatePlayerBar();
+
+        if (player.NeedsTick)
+            RequestAnimationFrame(OnPlaybackFrame);
+        else
+            _playbackLoopRunning = false;
+    }
+
+    private void UpdatePlayerBar()
+    {
+        if (_player is not { } player)
+            return;
+
+        PlayIcon.Data = (Geometry)Resources[player.IsPlaying ? "PauseGeometry" : "PlayGeometry"]!;
+        MuteIcon.Data = (Geometry)Resources[player.IsMuted ? "MutedGeometry" : "VolumeGeometry"]!;
+
+        // 드래그 중에는 슬라이더 위치의 시간을 미리 보여준다
+        var shown = _seekDragging ? TimeSpan.FromSeconds(SeekSlider.Value) : player.Position;
+        TimeText.Text = player.Duration is { } d ? $"{FormatTime(shown)} / {FormatTime(d)}" : FormatTime(shown);
+
+        if (!_seekDragging)
+        {
+            _updatingSeekSlider = true;
+            SeekSlider.Value = player.Position.TotalSeconds;
+            _updatingSeekSlider = false;
+        }
+    }
+
+    private void OnSeekSliderValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_updatingSeekSlider)
+            return;
+        if (_seekDragging)
+            UpdatePlayerBar(); // 시간 표시만 갱신, 실제 탐색은 놓을 때
+        else
+            SeekTo(TimeSpan.FromSeconds(e.NewValue));
+    }
+
+    private void EndSeekDrag()
+    {
+        if (!_seekDragging)
+            return;
+        _seekDragging = false;
+        SeekTo(TimeSpan.FromSeconds(SeekSlider.Value));
+    }
+
+    private static string FormatTime(TimeSpan t) =>
+        t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"mm\:ss");
 
     private async Task OpenWithDialogAsync()
     {
@@ -319,10 +462,16 @@ public partial class MainWindow : Window
     private void OnCloseFileClick(object? sender, RoutedEventArgs e) => ResetToEmpty();
     private void OnExitClick(object? sender, RoutedEventArgs e) => Close();
     private void OnCancelConvertClick(object? sender, RoutedEventArgs e) => _convertCts?.Cancel();
+    private void OnPlayClick(object? sender, RoutedEventArgs e) => TogglePlay();
+    private void OnMuteClick(object? sender, RoutedEventArgs e) => ToggleMute();
 
     private async void OnDropAreaPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (_sourcePath is null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            return;
+        if (_player is not null)
+            TogglePlay();
+        else if (_sourcePath is null)
             await OpenWithDialogAsync();
     }
 
@@ -332,7 +481,20 @@ public partial class MainWindow : Window
         // macOS는 Cmd(Meta) 키를 사용
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
         if (!ctrl)
+        {
+            if (_player is null || e.KeyModifiers != KeyModifiers.None)
+                return;
+            switch (e.Key)
+            {
+                case Key.Space: TogglePlay(); break;
+                case Key.Left: SeekBy(-5); break;
+                case Key.Right: SeekBy(5); break;
+                case Key.M: ToggleMute(); break;
+                default: return;
+            }
+            e.Handled = true;
             return;
+        }
 
         if (e.Key == Key.O)
         {
@@ -350,6 +512,8 @@ public partial class MainWindow : Window
     {
         // 변환 중에 창을 닫으면 ffmpeg 프로세스도 종료
         _convertCts?.Cancel();
+        _player?.Dispose();
+        _player = null;
         base.OnClosed(e);
     }
 
@@ -369,6 +533,11 @@ public partial class MainWindow : Window
         _bitmap?.Dispose();
         _bitmap = null;
         _media = null;
+        _player?.Dispose();
+        _player = null;
+        _showingPlayerFrame = false;
+        _seekDragging = false;
+        PlayerBar.IsVisible = false;
         PreviewFrame.IsVisible = false;
         AudioPlaceholder.IsVisible = false;
         UnsupportedText.IsVisible = false;

@@ -96,6 +96,28 @@ public static class FFmpeg
         result.ThrowIfFailed("ffmpeg");
     }
 
+    /// <summary>
+    /// 출력을 계속 읽어야 하는 ffmpeg 프로세스(재생용 디코더)를 시작한다.
+    /// stdout은 호출자가 읽고, stderr는 파이프가 막히지 않도록 버린다. 종료는 호출자 책임.
+    /// </summary>
+    internal static Process StartStreaming(IReadOnlyList<string> args)
+    {
+        var psi = new ProcessStartInfo(RequirePath(FFmpegPath, "ffmpeg"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var a in args)
+            psi.ArgumentList.Add(a);
+
+        var process = Process.Start(psi) ?? throw new InvalidOperationException("ffmpeg 실행 실패");
+        process.ErrorDataReceived += static (_, _) => { };
+        process.BeginErrorReadLine();
+        return process;
+    }
+
     private static string RequirePath(string? path, string name) =>
         path ?? throw new FileNotFoundException($"{name}을(를) 찾을 수 없습니다. {InstallHint}");
 
