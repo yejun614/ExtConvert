@@ -43,9 +43,16 @@ jobs:
       - name: Install FFmpeg (macOS)
         if: runner.os == 'macOS'
         run: brew install ffmpeg
+      # Chocolatey 커뮤니티 피드는 종종 504를 돌려주므로 GitHub Releases의 정적 빌드를 직접 받는다
       - name: Install FFmpeg (Windows)
         if: runner.os == 'Windows'
-        run: choco install ffmpeg -y --no-progress
+        shell: pwsh
+        run: |
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+          Invoke-WebRequest $url -OutFile "$env:RUNNER_TEMP\ffmpeg.zip" -MaximumRetryCount 5 -RetryIntervalSec 10
+          Expand-Archive "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath "$env:RUNNER_TEMP\ffmpeg"
+          $bin = (Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).DirectoryName
+          Add-Content $env:GITHUB_PATH $bin
 
       - name: FFmpeg version
         run: ffmpeg -hide_banner -version
