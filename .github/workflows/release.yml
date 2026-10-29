@@ -1,0 +1,85 @@
+name: Release
+
+# v1.2.3 형식의 태그를 푸시하면: 테스트 → 플랫폼별 단일 실행 파일 빌드 → GitHub Release에 업로드
+#   git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish (${{ matrix.rid }})
+    needs: test
+    strategy:
+      matrix:
+        rid: [win-x64, linux-x64, osx-arm64, osx-x64]
+    # self-contained 배포는 어느 OS에서나 모든 RID로 만들 수 있다 (tar로 묶어 실행 권한 보존)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          dotnet publish src/ExtConvert -c Release -r ${{ matrix.rid }} --self-contained \
+            -p:PublishSingleFile=true -p:Version="$version" \
+            -o "publish/ExtConvert-${{ matrix.rid }}"
+
+      - name: Package
+        working-directory: publish
+        run: |
+          name="ExtConvert-${GITHUB_REF_NAME}-${{ matrix.rid }}"
+          # 디버그 심볼은 배포에 넣지 않는다
+          find "ExtConvert-${{ matrix.rid }}" -name '*.pdb' -delete
+          if [[ "${{ matrix.rid }}" == win-* ]]; then
+            (cd "ExtConvert-${{ matrix.rid }}" && zip -qr "../$name.zip" .)
+          else
+            tar -czf "$name.tar.gz" -C "ExtConvert-${{ matrix.rid }}" .
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.rid }}
+          path: |
+            publish/*.zip
+            publish/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Ext Convert $GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "동영상/오디오 기능에는 FFmpeg가 필요합니다 (README의 FFmpeg 항목 참고). macOS 빌드는 서명되지 않아 처음 실행 시 우클릭 > 열기가 필요할 수 있습니다."

@@ -1,5 +1,7 @@
 # Ext Convert
 
+[![CI](https://github.com/yejun614/ExtConvert/actions/workflows/ci.yml/badge.svg)](https://github.com/yejun614/ExtConvert/actions/workflows/ci.yml)
+
 파일 미리보기 + 파일 형식 변환 데스크톱 앱 (C# / .NET 10 / Avalonia 12). Windows, Linux, macOS 지원.
 
 ## 기능
@@ -70,6 +72,16 @@
 ```sh
 dotnet run --project src/ExtConvert
 dotnet test
+```
+
+## CI / 릴리스
+
+- **CI** (`.github/workflows/ci.yml`): 브랜치 푸시와 `main` 대상 PR마다 Windows / Linux / macOS에서 빌드 + 테스트. FFmpeg를 설치해서 동영상/오디오 테스트까지 실행 (러너의 FFmpeg에 없는 인코더 형식은 자동으로 제외)
+- **릴리스** (`.github/workflows/release.yml`): `v`로 시작하는 태그를 푸시하면 테스트 후 `win-x64`, `linux-x64`, `osx-arm64`, `osx-x64` 단일 실행 파일을 만들어 GitHub Release에 업로드 (버전은 태그에서)
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ## 배포용 단일 실행 파일

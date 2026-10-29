@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]     # 브랜치 푸시마다 (태그 푸시는 release.yml이 이 워크플로를 호출)
+  pull_request:
+    branches: [main]
+  workflow_call:          # release.yml에서 배포 전에 같은 테스트를 실행
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # 동영상/오디오 테스트는 ffmpeg가 없으면 건너뛰므로 실제로 검증되도록 설치한다.
+      # 빌드마다 들어 있는 인코더가 달라서, 없는 형식은 앱과 테스트 모두 자동으로 제외된다.
+      - name: Install FFmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+
+      - name: FFmpeg version
+        run: ffmpeg -hide_banner -version
+
+      - run: dotnet restore
+      - run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test -c Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: TestResults
