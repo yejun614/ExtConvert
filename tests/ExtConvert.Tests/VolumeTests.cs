@@ -113,8 +113,9 @@ public class VolumeTests(MediaFixture fx) : IClassFixture<MediaFixture>
     private static List<byte[]> CaptureQueuedBuffers(byte[] pcm, float gain, out (float AlGain, float Boost) stages)
     {
         var captured = new ConcurrentQueue<byte[]>();
-        using var stream = new AudioStream(AudioDevice.Shared!, new MemoryStream(pcm), gain);
-        stream.BufferQueued = chunk => captured.Enqueue(chunk.ToArray());
+        // 콜백은 생성자에서 넘긴다: 스레드가 곧바로 버퍼를 채우므로 나중에 연결하면 빠른 기기에서 앞부분을 놓친다
+        using var stream = new AudioStream(AudioDevice.Shared!, new MemoryStream(pcm), gain,
+            chunk => captured.Enqueue(chunk.ToArray()));
         stages = stream.GainStages;
 
         // 재생하지 않아도 스레드가 큐(12개)를 채운다

@@ -74,11 +74,14 @@ internal sealed class AudioStream : IDisposable
     private volatile float _boost = 1f;
     private float _alGain = 1f;
 
-    /// <summary>테스트용: OpenAL에 넘기기 직전의(증폭이 적용된) PCM.</summary>
-    internal Action<ReadOnlyMemory<byte>>? BufferQueued { get; set; }
+    /// <summary>테스트용: OpenAL에 넘기기 직전의(증폭이 적용된) PCM. 첫 버퍼부터 받도록 생성자에서 넘긴다.</summary>
+    private readonly Action<ReadOnlyMemory<byte>>? _bufferQueued;
 
-    public AudioStream(AudioDevice device, Stream pcm, float gain = 1f)
+    /// <param name="bufferQueued">테스트용 관찰 콜백. 스레드가 바로 버퍼를 채우므로 생성 뒤에 연결하면 앞부분을 놓친다.</param>
+    public AudioStream(AudioDevice device, Stream pcm, float gain = 1f,
+        Action<ReadOnlyMemory<byte>>? bufferQueued = null)
     {
+        _bufferQueued = bufferQueued;
         _device = device;
         _pcm = pcm;
         lock (device.Sync)
@@ -197,7 +200,7 @@ internal sealed class AudioStream : IDisposable
 
                     // 100% 초과 음량: OpenAL에 넘기기 전에 샘플 자체를 증폭 (리미터 포함)
                     _booster.Process(chunk.AsSpan(0, read), _boost);
-                    BufferQueued?.Invoke(chunk.AsMemory(0, read));
+                    _bufferQueued?.Invoke(chunk.AsMemory(0, read));
 
                     var buf = free.Dequeue();
                     lock (_device.Sync)
