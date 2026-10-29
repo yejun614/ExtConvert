@@ -63,7 +63,9 @@ public sealed class MediaPlayer : IDisposable
     {
         get
         {
-            var pos = _session?.Clock ?? _position;
+            // 끝까지 재생했으면 세션 시계가 아니라 확정된 끝 위치를 쓴다.
+            // (끝 감지는 오디오가 다 나간 시점이라 시계가 길이보다 몇십 ms 짧을 수 있음)
+            var pos = IsEnded ? _position : _session?.Clock ?? _position;
             return Duration is { } d && pos > d ? d : pos;
         }
     }
