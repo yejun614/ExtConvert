@@ -127,11 +127,20 @@ public class ExporterTests
     }
 
     [Theory]
-    [InlineData(".ico", typeof(IcoExporter))]
-    [InlineData("PNG", typeof(PngExporter))]
-    [InlineData(".jpeg", typeof(JpegExporter))]
-    [InlineData(".jpg", typeof(JpegExporter))]
-    [InlineData(".MP3", typeof(ExtConvert.Media.Mp3Exporter))]
-    public void FindByExtension_ResolvesExporter(string extension, Type expected) =>
-        Assert.IsType(expected, Exporters.Images.Concat<IExporter>(Exporters.Media).FindByExtension(extension));
+    [InlineData(".ico", "ico")]
+    [InlineData("PNG", "png")]
+    [InlineData(".jpeg", "jpg")]
+    [InlineData(".jpg", "jpg")]
+    [InlineData(".tiff", "tif")]
+    [InlineData(".MP3", "mp3")]
+    [InlineData("aif", "aiff")]
+    public void FindByExtension_ResolvesExporter(string extension, string expected) =>
+        Assert.Equal(expected, Exporters.Images.Concat<IExporter>(Exporters.Media).FindByExtension(extension)?.Extension);
+
+    [Fact]
+    public void Exporters_HaveUniqueExtensionsPerKind()
+    {
+        Assert.Equal(Exporters.Images.Count, Exporters.Images.Select(e => e.Extension).Distinct().Count());
+        Assert.Equal(Exporters.Media.Count, Exporters.Media.Select(e => e.Extension).Distinct().Count());
+    }
 }

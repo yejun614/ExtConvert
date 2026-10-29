@@ -14,6 +14,8 @@ public sealed record MediaInfo
     public double FrameRate { get; init; }
     /// <summary>표시 회전 각도 (휴대폰 세로 영상 등). ffmpeg는 디코딩 시 자동으로 회전시킨다.</summary>
     public int Rotation { get; init; }
+    /// <summary>비디오 프레임 수 (컨테이너가 알려줄 때만, 모르면 0). 애니메이션 GIF 판별에 사용.</summary>
+    public int FrameCount { get; init; }
     public string? AudioCodec { get; init; }
     public int AudioChannels { get; init; }
     public int SampleRate { get; init; }
@@ -59,6 +61,7 @@ public sealed record MediaInfo
                         ? avg
                         : ParseRate(s.GetStringOrNull("r_frame_rate")),
                     Rotation = ParseRotation(s),
+                    FrameCount = int.TryParse(s.GetStringOrNull("nb_frames"), out var frames) ? frames : 0,
                 };
             else if (type == "audio" && info.AudioCodec is null)
                 info = info with

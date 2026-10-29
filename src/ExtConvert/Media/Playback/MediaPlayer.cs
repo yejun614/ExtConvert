@@ -78,19 +78,29 @@ public sealed class MediaPlayer : IDisposable
         }
     }
 
-    /// <summary>볼륨 0~1. 음소거와는 별개로 유지된다.</summary>
+    /// <summary>최대 볼륨 (2 = 200%). 1(100%)이 원본 음량.</summary>
+    public const double MaxVolume = 2;
+
+    /// <summary>볼륨 0~<see cref="MaxVolume"/> (1 = 원본). 음소거와는 별개로 유지된다.</summary>
     public double Volume
     {
         get => _volume;
         set
         {
-            _volume = Math.Clamp(value, 0, 1);
+            _volume = Math.Clamp(value, 0, MaxVolume);
             ApplyGain();
         }
     }
 
-    // 사람 귀는 음량을 로그적으로 느끼므로 제곱 곡선을 써야 슬라이더 중간이 "절반 정도"로 들린다
-    private float EffectiveGain => _muted ? 0f : (float)(_volume * _volume);
+    private float EffectiveGain => _muted ? 0f : GainFor(_volume);
+
+    /// <summary>
+    /// 볼륨 → 실제 증폭 배율.
+    /// 100% 이하는 제곱 곡선 (사람 귀는 음량을 로그적으로 느끼므로 슬라이더 중간이 "절반 정도"로 들림).
+    /// 100% 초과는 직선이라 200% = 2배(+6dB). 제곱이면 4배(+12dB)가 되어 쉽게 찢어지는 소리가 난다.
+    /// </summary>
+    internal static float GainFor(double volume) =>
+        volume <= 1 ? (float)(volume * volume) : (float)Math.Min(volume, MaxVolume);
 
     private void ApplyGain() => _session?.Audio?.SetGain(EffectiveGain);
 
@@ -211,8 +221,8 @@ public sealed class MediaPlayer : IDisposable
                 "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "2", "-ar", AudioStream.SampleRate.ToString(),
                 "pipe:1",
             ]);
-            audio = new AudioStream(device, audioProc.StandardOutput.BaseStream);
-            audio.SetGain(EffectiveGain);
+            // 음량은 생성 시점에 넘긴다: 스레드가 바로 버퍼를 채우므로 나중에 설정하면 탐색 직후 잠깐 100%로 들린다
+            audio = new AudioStream(device, audioProc.StandardOutput.BaseStream, EffectiveGain);
         }
 
         return new Session(start, videoProc, audioProc, video, audio);

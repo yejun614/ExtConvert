@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ExtConvert.MediaOptionsWindow"
+        Title="저장 옵션"
+        SizeToContent="WidthAndHeight"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="16" Spacing="12" MinWidth="300">
+    <CheckBox x:Name="CopyBox" Content="재인코딩 없이 저장 (빠름, 화질/음질 손실 없음)"
+              IsCheckedChanged="OnCopyChanged" />
+
+    <!-- 숨긴 행이 간격을 차지하지 않도록 Grid 대신 StackPanel + 공유 열 너비 사용 -->
+    <StackPanel x:Name="OptionsPanel" Spacing="8" Grid.IsSharedSizeScope="True">
+      <Grid x:Name="CodecRow" ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="비디오 코덱" VerticalAlignment="Center" />
+        <ComboBox x:Name="CodecBox" Grid.Column="1" MinWidth="160" HorizontalAlignment="Stretch" />
+      </Grid>
+      <Grid x:Name="QualityRow" ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="화질" VerticalAlignment="Center" />
+        <ComboBox x:Name="QualityBox" Grid.Column="1" MinWidth="160" HorizontalAlignment="Stretch" />
+      </Grid>
+      <Grid x:Name="ResolutionRow" ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="해상도" VerticalAlignment="Center" />
+        <ComboBox x:Name="ResolutionBox" Grid.Column="1" MinWidth="160" HorizontalAlignment="Stretch" />
+      </Grid>
+      <Grid x:Name="FrameRateRow" ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="프레임 레이트" VerticalAlignment="Center" />
+        <ComboBox x:Name="FrameRateBox" Grid.Column="1" MinWidth="160" HorizontalAlignment="Stretch" />
+      </Grid>
+      <Grid x:Name="BitrateRow" ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="비트레이트" VerticalAlignment="Center" />
+        <ComboBox x:Name="BitrateBox" Grid.Column="1" MinWidth="160" HorizontalAlignment="Stretch" />
+      </Grid>
+    </StackPanel>
+
+    <TextBlock x:Name="HintText" FontSize="12" Opacity="0.7" TextWrapping="Wrap" MaxWidth="320" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="저장" IsDefault="True" Click="OnOkClick" MinWidth="72" HorizontalContentAlignment="Center" />
+      <Button Content="취소" IsCancel="True" Click="OnCancelClick" MinWidth="72" HorizontalContentAlignment="Center" />
+    </StackPanel>
+  </StackPanel>
+</Window>

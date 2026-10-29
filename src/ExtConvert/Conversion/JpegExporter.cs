@@ -9,6 +9,12 @@ public sealed class JpegExporter : IImageExporter
     public string DisplayName => "JPEG 이미지";
     public string Extension => "jpg";
 
+    public Task ExportAsync(Bitmap source, Stream output, ExportOptions options, CancellationToken ct = default)
+    {
+        Export(source, output, options);
+        return Task.CompletedTask;
+    }
+
     public void Export(Bitmap source, Stream output, ExportOptions options)
     {
         var size = source.PixelSize;

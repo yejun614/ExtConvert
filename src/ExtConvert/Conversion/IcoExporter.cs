@@ -14,6 +14,12 @@ public sealed class IcoExporter : IImageExporter
     public string DisplayName => "Windows 아이콘";
     public string Extension => "ico";
 
+    public Task ExportAsync(Bitmap source, Stream output, ExportOptions options, CancellationToken ct = default)
+    {
+        Export(source, output, options);
+        return Task.CompletedTask;
+    }
+
     public void Export(Bitmap source, Stream output, ExportOptions options)
     {
         var sizes = options.IcoSizes.Where(s => s is >= 1 and <= 256).Distinct().Order().ToArray();

@@ -108,8 +108,10 @@ public class PlaybackTests(MediaFixture fx) : IClassFixture<MediaFixture>
         RequireFFmpeg();
         using var player = await OpenAsync(fx.VideoWithAudio);
 
-        player.Volume = 1.5;
-        Assert.Equal(1, player.Volume);
+        player.Volume = 1.5; // 100% 초과(증폭) 허용
+        Assert.Equal(1.5, player.Volume);
+        player.Volume = 2.5;
+        Assert.Equal(MediaPlayer.MaxVolume, player.Volume);
         player.Volume = -1;
         Assert.Equal(0, player.Volume);
 

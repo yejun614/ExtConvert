@@ -44,4 +44,59 @@ public class UiTests(MediaFixture fx) : IClassFixture<MediaFixture>
 
         window.Close();
     }
+
+    [AvaloniaFact]
+    public async Task MediaOptionsWindow_OpensForEveryExporter()
+    {
+        Assert.SkipUnless(FFmpeg.IsAvailable, "ffmpeg/ffprobe가 설치되어 있지 않습니다.");
+        var info = await FFmpeg.ProbeAsync(fx.VideoWithAudio);
+
+        foreach (var exporter in Conversion.Exporters.Media.Where(e => e.IsAvailable))
+        {
+            var dialog = new MediaOptionsWindow(exporter, info);
+            dialog.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            // 동영상 옵션은 동영상 변환기에서만, 원본(320×240)보다 큰 해상도는 목록에 없음
+            var resolution = dialog.FindControl<ComboBox>("ResolutionBox")!;
+            Assert.Equal(exporter.RequiresVideo, dialog.FindControl<Grid>("ResolutionRow")!.IsVisible);
+            Assert.DoesNotContain("480p", resolution.Items.Cast<string>());
+            Assert.Equal(exporter.CanCopy(info), dialog.FindControl<CheckBox>("CopyBox")!.IsVisible);
+            dialog.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task AnimatedGif_OpensAsPlayableMedia()
+    {
+        Assert.SkipUnless(FFmpeg.IsAvailable, "ffmpeg/ffprobe가 설치되어 있지 않습니다.");
+        var gif = Path.Combine(fx.Dir, "ui_anim.gif");
+        await FFmpeg.ConvertAsync(["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", fx.VideoOnly, gif], null);
+
+        var window = new MainWindow();
+        window.Show();
+        await window.LoadFileAsync(gif);
+
+        Assert.True(window.FindControl<Grid>("PlayerBar")!.IsVisible);
+        Assert.True(window.FindControl<MenuItem>("SaveAsMenuItem")!.IsEnabled);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task FFmpegOnlyImage_OpensForPreview()
+    {
+        Assert.SkipUnless(FFmpeg.IsAvailable, "ffmpeg/ffprobe가 설치되어 있지 않습니다.");
+        var tif = Path.Combine(fx.Dir, "ui_image.tif");
+        await FFmpeg.ConvertAsync(
+            ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", fx.VideoOnly, "-frames:v", "1", "-update", "1", tif], null);
+
+        var window = new MainWindow();
+        window.Show();
+        await window.LoadFileAsync(tif);
+
+        Assert.True(window.FindControl<Control>("PreviewFrame")!.IsVisible);
+        Assert.False(window.FindControl<Grid>("PlayerBar")!.IsVisible);
+        Assert.Contains("160×120", window.FindControl<TextBlock>("StatusText")!.Text);
+        window.Close();
+    }
 }

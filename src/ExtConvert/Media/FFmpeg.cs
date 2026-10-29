@@ -17,6 +17,11 @@ public static class FFmpeg
     public static string? FFprobePath => FFprobeExe.Value;
     public static bool IsAvailable => FFmpegPath is not null && FFprobePath is not null;
 
+    private static readonly Lazy<HashSet<string>> Encoders = new(ListEncoders);
+
+    /// <summary>설치된 ffmpeg에 해당 인코더(예: "libx264")가 포함되어 있는지. 빌드마다 다르다.</summary>
+    public static bool HasEncoder(string name) => Encoders.Value.Contains(name);
+
     public static string InstallHint =>
         OperatingSystem.IsWindows() ? "설치: winget install Gyan.FFmpeg" :
         OperatingSystem.IsMacOS() ? "설치: brew install ffmpeg" :
@@ -45,6 +50,41 @@ public static class FFmpeg
             .FirstOrDefault(File.Exists);
     }
 
+    private static HashSet<string> ListEncoders()
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        if (FFmpegPath is null)
+            return set;
+        try
+        {
+            var psi = new ProcessStartInfo(FFmpegPath, "-hide_banner -encoders")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var process = Process.Start(psi)!;
+            process.ErrorDataReceived += static (_, _) => { };
+            process.BeginErrorReadLine();
+            // 출력 예: " V....D libx264              libx264 H.264 ..." (헤더 뒤 " ------" 줄 다음부터 목록)
+            var started = false;
+            while (process.StandardOutput.ReadLine() is { } line)
+            {
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (!started)
+                    started = parts is ["------", ..];
+                else if (parts.Length >= 2)
+                    set.Add(parts[1]);
+            }
+            process.WaitForExit();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+        }
+        return set;
+    }
+
     /// <summary>ffprobe로 파일 정보를 읽는다.</summary>
     public static async Task<MediaInfo> ProbeAsync(string path, CancellationToken ct = default)
     {
@@ -55,21 +95,45 @@ public static class FFmpeg
         return MediaInfo.Parse(Encoding.UTF8.GetString(result.Stdout));
     }
 
-    /// <summary>지정한 시점의 프레임 하나를 PNG로 추출한다. 비디오 트랙이 없으면 null.</summary>
-    public static async Task<byte[]?> ExtractFramePngAsync(string path, TimeSpan at, int maxWidth = 960,
+    /// <summary>
+    /// 지정한 시점의 프레임 하나를 PNG로 추출한다. 비디오 트랙이 없으면 null.
+    /// <paramref name="maxWidth"/>가 null이면 원본 해상도.
+    /// </summary>
+    public static async Task<byte[]?> ExtractFramePngAsync(string path, TimeSpan at, int? maxWidth = 960,
         CancellationToken ct = default)
     {
-        var result = await RunAsync(RequirePath(FFmpegPath, "ffmpeg"),
+        List<string> args =
         [
             "-hide_banner", "-nostdin", "-loglevel", "error",
             "-ss", at.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture),
             "-i", path,
             "-frames:v", "1",
-            "-vf", $"scale='min({maxWidth},iw)':-2",
-            "-f", "image2pipe", "-c:v", "png", "pipe:1",
+        ];
+        if (maxWidth is { } mw)
+            args.AddRange(["-vf", $"scale='min({mw},iw)':-2"]);
+        args.AddRange(["-f", "image2pipe", "-c:v", "png", "pipe:1"]);
+
+        var result = await RunAsync(RequirePath(FFmpegPath, "ffmpeg"), args, onStdoutLine: null, ct);
+        return result.ExitCode == 0 && result.Stdout.Length > 0 ? result.Stdout : null;
+    }
+
+    /// <summary>
+    /// Avalonia가 직접 읽지 못하는 이미지(TIFF, AVIF, HEIC, PSD 등)를 원본 크기의 RGBA PNG로 디코딩한다.
+    /// </summary>
+    public static async Task<byte[]> DecodeImagePngAsync(string path, CancellationToken ct = default)
+    {
+        var result = await RunAsync(RequirePath(FFmpegPath, "ffmpeg"),
+        [
+            "-hide_banner", "-nostdin", "-loglevel", "error",
+            "-i", path,
+            "-frames:v", "1",
+            "-f", "image2pipe", "-c:v", "png", "-pix_fmt", "rgba", "pipe:1",
         ], onStdoutLine: null, ct);
 
-        return result.ExitCode == 0 && result.Stdout.Length > 0 ? result.Stdout : null;
+        result.ThrowIfFailed("ffmpeg");
+        if (result.Stdout.Length == 0)
+            throw new InvalidOperationException("이미지를 디코딩하지 못했습니다.");
+        return result.Stdout;
     }
 
     /// <summary>

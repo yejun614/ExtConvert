@@ -46,8 +46,11 @@ internal sealed class AudioStream : IDisposable
 {
     public const int SampleRate = 48000;
     private const int BytesPerFrame = 4; // 16bit × 2ch
-    private const int BufferCount = 6;
-    private const int BufferBytes = 4096 * BytesPerFrame; // 약 85ms
+    // 버퍼 12개 × 약 21ms = 약 256ms. 증폭(DSP)은 버퍼에 넣을 때 적용되므로 이 길이가 증폭 변경의 최대 지연이다.
+    private const int BufferCount = 12;
+    private const int BufferBytes = 1024 * BytesPerFrame;
+    /// <summary>최대 음량 배율 (200%).</summary>
+    internal const float MaxGain = 2f;
 
     private readonly AudioDevice _device;
     private readonly Stream _pcm;
@@ -65,7 +68,16 @@ internal sealed class AudioStream : IDisposable
     private int _queuedCount;
     private long _lastPlayedFrames;
 
-    public AudioStream(AudioDevice device, Stream pcm)
+    /// <summary>100% 초과분을 담당하는 DSP. 디코딩 스레드에서만 사용.</summary>
+    private readonly VolumeBooster _booster = new(SampleRate);
+    /// <summary>DSP 증폭 목표 배율 (≥ 1). UI 스레드에서 쓰고 디코딩 스레드에서 읽는다.</summary>
+    private volatile float _boost = 1f;
+    private float _alGain = 1f;
+
+    /// <summary>테스트용: OpenAL에 넘기기 직전의(증폭이 적용된) PCM.</summary>
+    internal Action<ReadOnlyMemory<byte>>? BufferQueued { get; set; }
+
+    public AudioStream(AudioDevice device, Stream pcm, float gain = 1f)
     {
         _device = device;
         _pcm = pcm;
@@ -74,6 +86,9 @@ internal sealed class AudioStream : IDisposable
             _source = device.Al.GenSource();
             _buffers = device.Al.GenBuffers(BufferCount);
         }
+        // 스레드를 시작하기 전에 설정해야 첫 버퍼부터 이 음량이 적용된다
+        SetGain(gain);
+        _booster.StartAt(_boost);
         _thread = new Thread(Run) { IsBackground = true, Name = "AudioStream" };
         _thread.Start();
     }
@@ -127,12 +142,22 @@ internal sealed class AudioStream : IDisposable
             _device.Al.SourcePause(_source);
     }
 
-    /// <summary>출력 음량 (0 = 무음, 1 = 원본).</summary>
+    /// <summary>
+    /// 출력 음량 배율 (0 = 무음, 1 = 원본, 최대 <see cref="MaxGain"/>).
+    /// 1 이하는 OpenAL 게인으로 즉시 적용하고, 1을 넘는 부분은 OpenAL이 낼 수 없으므로
+    /// 버퍼에 넣기 전 PCM에 DSP로 적용한다 (이미 큐에 있는 소리만큼, 최대 약 0.25초 늦게 반영).
+    /// </summary>
     public void SetGain(float gain)
     {
+        gain = Math.Clamp(gain, 0f, MaxGain);
+        _boost = Math.Max(1f, gain);
+        _alGain = Math.Min(1f, gain);
         lock (_device.Sync)
-            _device.Al.SetSourceProperty(_source, SourceFloat.Gain, Math.Clamp(gain, 0f, 1f));
+            _device.Al.SetSourceProperty(_source, SourceFloat.Gain, _alGain);
     }
+
+    /// <summary>음량이 두 단계(OpenAL 게인 ≤ 1, DSP 증폭 ≥ 1)로 어떻게 나뉘었는지 (테스트·진단용).</summary>
+    internal (float AlGain, float Boost) GainStages => (_alGain, _boost);
 
     private void Run()
     {
@@ -169,6 +194,10 @@ internal sealed class AudioStream : IDisposable
                         _eof = true;
                         break;
                     }
+
+                    // 100% 초과 음량: OpenAL에 넘기기 전에 샘플 자체를 증폭 (리미터 포함)
+                    _booster.Process(chunk.AsSpan(0, read), _boost);
+                    BufferQueued?.Invoke(chunk.AsMemory(0, read));
 
                     var buf = free.Dequeue();
                     lock (_device.Sync)

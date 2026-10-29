@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:ExtConvert.Controls"
         x:Class="ExtConvert.MainWindow"
         Title="Ext Convert"
         Width="480" Height="420"
@@ -34,6 +35,17 @@
         <MenuItem x:Name="CloseFileMenuItem" Header="닫기(_C)" Click="OnCloseFileClick" />
         <MenuItem Header="끝내기(_X)" Click="OnExitClick" />
       </MenuItem>
+      <!-- 하위 항목은 Exporters 목록으로 코드에서 만들고, 열린 파일에 따라 활성화한다 -->
+      <MenuItem x:Name="ConvertMenu" Header="변환(_V)">
+        <MenuItem x:Name="ImageConvertMenu" Header="이미지(_I)" />
+        <MenuItem x:Name="VideoConvertMenu" Header="동영상(_D)" />
+        <MenuItem x:Name="AudioConvertMenu" Header="오디오(_U)" />
+        <Separator />
+        <MenuItem x:Name="RangeModeMenuItem" Header="선택 구간만 변환(_R)" ToggleType="CheckBox"
+                  Click="OnRangeModeMenuClick" />
+        <MenuItem x:Name="CropModeMenuItem" Header="선택 영역만 변환(_E)" ToggleType="CheckBox"
+                  Click="OnCropModeMenuClick" />
+      </MenuItem>
     </Menu>
 
     <Border DockPanel.Dock="Bottom" Padding="10,4"
@@ -48,7 +60,7 @@
       </Grid>
     </Border>
 
-    <Grid RowDefinitions="*,Auto">
+    <Grid RowDefinitions="*,Auto,Auto,Auto">
     <Panel x:Name="DropArea" Margin="12" Background="Transparent" Cursor="Hand"
            PointerPressed="OnDropAreaPressed">
       <Rectangle x:Name="DropBorder" StrokeThickness="2" StrokeDashArray="4,3"
@@ -61,11 +73,14 @@
         <TextBlock Text="또는 클릭해서 파일 선택" HorizontalAlignment="Center" FontSize="12" Opacity="0.6" />
       </StackPanel>
 
-      <StackPanel x:Name="AudioPlaceholder" IsVisible="False" Spacing="8"
-                  HorizontalAlignment="Center" VerticalAlignment="Center">
-        <TextBlock Text="♪" FontSize="64" HorizontalAlignment="Center" Opacity="0.6" />
-        <TextBlock x:Name="AudioNameText" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
-      </StackPanel>
+      <!-- 오디오: 파일 이름 + 파형 (클릭/드래그로 탐색) -->
+      <Grid x:Name="AudioPlaceholder" IsVisible="False" Margin="20,16" RowDefinitions="Auto,*">
+        <TextBlock x:Name="AudioNameText" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   Margin="0,0,0,8" Opacity="0.8" />
+        <controls:WaveformView x:Name="WaveformView" Grid.Row="1" MaxHeight="260" VerticalAlignment="Stretch"
+                               PlayedBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                               RemainingBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
+      </Grid>
 
       <TextBlock x:Name="UnsupportedText" IsVisible="False" TextWrapping="Wrap" TextAlignment="Center"
                  HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16" />
@@ -79,10 +94,18 @@
                  RenderOptions.BitmapInterpolationMode="HighQuality" />
         </Border>
       </Viewbox>
+
+      <!-- 영역 선택 모드에서만 보이는 자르기 레이어 (미리보기 바깥에 겹쳐서 손잡이 크기가 배율과 무관) -->
+      <controls:CropOverlay x:Name="CropOverlay" IsVisible="False" />
     </Panel>
 
+    <!-- 동영상 구간 선택용 타임라인 (오디오 트랙이 있으면 파형도 표시) -->
+    <controls:WaveformView x:Name="TimelineView" Grid.Row="1" IsVisible="False" Height="44" Margin="12,0,12,6"
+                           PlayedBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                           RemainingBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
+
     <!-- 동영상/오디오 재생 컨트롤 -->
-    <Grid x:Name="PlayerBar" Grid.Row="1" IsVisible="False" Margin="12,0,12,8"
+    <Grid x:Name="PlayerBar" Grid.Row="2" IsVisible="False" Margin="12,0,12,8"
           ColumnDefinitions="Auto,Auto,*,Auto">
       <Button x:Name="PlayButton" Click="OnPlayClick" Focusable="False" Padding="10,6"
               ToolTip.Tip="재생 / 일시정지 (Space)">
@@ -97,10 +120,51 @@
                 ToolTip.Tip="소리 끄기 / 켜기 (M)">
           <PathIcon x:Name="MuteIcon" Width="14" Height="12" Data="{StaticResource VolumeGeometry}" />
         </Button>
-        <Slider x:Name="VolumeSlider" Width="72" Minimum="0" Maximum="100" Value="100" Focusable="False"
-                VerticalAlignment="Center" Margin="6,-8,0,-8" ToolTip.Tip="볼륨 (↑/↓)" />
+        <!-- 0~200%. 100%(원본) 위치에 눈금을 둔다 -->
+        <Slider x:Name="VolumeSlider" Width="100" Minimum="0" Maximum="200" Value="100" Focusable="False"
+                Ticks="100" TickPlacement="BottomRight"
+                VerticalAlignment="Center" Margin="6,-8,0,-8" ToolTip.Tip="볼륨 0~200% (↑/↓, 100%가 원본)" />
+        <TextBlock x:Name="VolumeText" Width="44" Margin="6,0,0,0" VerticalAlignment="Center"
+                   FontSize="12" TextAlignment="Right" Text="100%" />
       </StackPanel>
     </Grid>
+
+    <!-- 편집 도구: 기본은 전체 변환. 켠 모드만 적용된다.
+         구간 선택 = 오디오·동영상, 영역 선택 = 이미지·동영상 (열린 파일에 맞는 버튼만 보임) -->
+    <WrapPanel x:Name="EditBar" Grid.Row="3" IsVisible="False" Margin="12,0,12,8"
+               HorizontalAlignment="Center" ItemSpacing="8" LineSpacing="6">
+      <ToggleButton x:Name="RangeModeButton" Content="✂ 구간 선택" Focusable="False" Padding="10,4"
+                    IsCheckedChanged="OnRangeModeChanged"
+                    ToolTip.Tip="켜면 파형/타임라인에서 고른 구간만 저장/변환합니다" />
+      <StackPanel x:Name="RangeFields" Orientation="Horizontal" Spacing="6" IsVisible="False">
+        <TextBlock Text="시작" VerticalAlignment="Center" />
+        <TextBox x:Name="RangeStartBox" Width="88" HorizontalContentAlignment="Center"
+                 KeyDown="OnRangeBoxKeyDown" LostFocus="OnRangeBoxLostFocus" />
+        <Button x:Name="SetRangeStartButton" Content="[" Focusable="False" Padding="8,4" Click="OnSetRangeStartClick"
+                ToolTip.Tip="현재 재생 위치를 시작으로 (I)" />
+        <TextBlock Text="끝" VerticalAlignment="Center" Margin="4,0,0,0" />
+        <TextBox x:Name="RangeEndBox" Width="88" HorizontalContentAlignment="Center"
+                 KeyDown="OnRangeBoxKeyDown" LostFocus="OnRangeBoxLostFocus" />
+        <Button x:Name="SetRangeEndButton" Content="]" Focusable="False" Padding="8,4" Click="OnSetRangeEndClick"
+                ToolTip.Tip="현재 재생 위치를 끝으로 (O)" />
+        <TextBlock x:Name="RangeLengthText" VerticalAlignment="Center" Opacity="0.7" />
+      </StackPanel>
+      <ToggleButton x:Name="CropModeButton" Content="⬚ 영역 선택" Focusable="False" Padding="10,4"
+                    IsCheckedChanged="OnCropModeChanged"
+                    ToolTip.Tip="켜면 화면에서 끌어서 고른 영역만 저장/변환합니다" />
+      <StackPanel x:Name="CropFields" Orientation="Horizontal" Spacing="6" IsVisible="False">
+        <TextBlock Text="X" VerticalAlignment="Center" />
+        <NumericUpDown x:Name="CropXBox" Width="70" ShowButtonSpinner="False" FormatString="0" Minimum="0" />
+        <TextBlock Text="Y" VerticalAlignment="Center" />
+        <NumericUpDown x:Name="CropYBox" Width="70" ShowButtonSpinner="False" FormatString="0" Minimum="0" />
+        <TextBlock Text="너비" VerticalAlignment="Center" Margin="4,0,0,0" />
+        <NumericUpDown x:Name="CropWidthBox" Width="70" ShowButtonSpinner="False" FormatString="0" Minimum="1" />
+        <TextBlock Text="높이" VerticalAlignment="Center" />
+        <NumericUpDown x:Name="CropHeightBox" Width="70" ShowButtonSpinner="False" FormatString="0" Minimum="1" />
+        <ComboBox x:Name="CropRatioBox" MinWidth="96" Margin="4,0,0,0" ToolTip.Tip="가로:세로 비율 고정"
+                  SelectionChanged="OnCropRatioChanged" />
+      </StackPanel>
+    </WrapPanel>
     </Grid>
   </DockPanel>
 </Window>

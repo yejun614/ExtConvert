@@ -12,12 +12,19 @@ public interface IExporter
 
 public static class ExporterExtensions
 {
-    /// <summary>확장자(점 유무, 대소문자 무관)로 변환기를 찾는다. "jpeg"는 "jpg"로 취급한다.</summary>
+    /// <summary>같은 형식의 다른 확장자 → 변환기의 기본 확장자.</summary>
+    private static readonly Dictionary<string, string> Aliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["jpeg"] = "jpg", ["jpe"] = "jpg", ["jfif"] = "jpg",
+        ["tiff"] = "tif", ["aif"] = "aiff", ["mpeg"] = "mpg", ["m4v"] = "mp4",
+    };
+
+    /// <summary>확장자(점 유무, 대소문자 무관)로 변환기를 찾는다. "jpeg"는 "jpg"처럼 별칭도 인식한다.</summary>
     public static T? FindByExtension<T>(this IEnumerable<T> exporters, string extension) where T : IExporter
     {
         var ext = extension.TrimStart('.');
-        if (ext.Equals("jpeg", StringComparison.OrdinalIgnoreCase))
-            ext = "jpg";
+        if (Aliases.TryGetValue(ext, out var canonical))
+            ext = canonical;
         return exporters.FirstOrDefault(e => e.Extension.Equals(ext, StringComparison.OrdinalIgnoreCase));
     }
 }

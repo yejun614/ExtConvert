@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
+using ExtConvert.Conversion;
 using ExtConvert.Media;
 using Xunit;
 
@@ -45,6 +46,8 @@ public sealed class MediaFixture : IAsyncLifetime
 
 public class MediaTests(MediaFixture fx) : IClassFixture<MediaFixture>
 {
+    private static IMediaExporter Mp3 => Exporters.Media.FindByExtension("mp3")!;
+
     private static void RequireFFmpeg() =>
         Assert.SkipUnless(FFmpeg.IsAvailable, "ffmpeg/ffprobe가 설치되어 있지 않습니다.");
 
@@ -83,7 +86,7 @@ public class MediaTests(MediaFixture fx) : IClassFixture<MediaFixture>
 
         var reports = new List<double>();
         var progress = new SyncProgress(reports.Add);
-        var args = new Mp3Exporter().BuildArguments(fx.VideoWithAudio, output,
+        var args = Mp3.BuildArguments(fx.VideoWithAudio, output, source,
             new MediaExportOptions { AudioBitrateKbps = 128 });
         await FFmpeg.ConvertAsync(args, source.Duration, progress, ct);
 
@@ -100,7 +103,7 @@ public class MediaTests(MediaFixture fx) : IClassFixture<MediaFixture>
     {
         RequireFFmpeg();
         var output = Path.Combine(fx.Dir, "no_audio.mp3");
-        var args = new Mp3Exporter().BuildArguments(fx.VideoOnly, output, new MediaExportOptions());
+        var args = Mp3.BuildArguments(fx.VideoOnly, output, new MediaInfo(), new MediaExportOptions());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => FFmpeg.ConvertAsync(args, null, null, TestContext.Current.CancellationToken));
         Assert.StartsWith("ffmpeg 오류:", ex.Message);
@@ -111,7 +114,7 @@ public class MediaTests(MediaFixture fx) : IClassFixture<MediaFixture>
     {
         RequireFFmpeg();
         var output = Path.Combine(fx.Dir, "cancelled.mp3");
-        var args = new Mp3Exporter().BuildArguments(fx.VideoWithAudio, output, new MediaExportOptions());
+        var args = Mp3.BuildArguments(fx.VideoWithAudio, output, new MediaInfo(), new MediaExportOptions());
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => FFmpeg.ConvertAsync(args, null, null, new CancellationToken(canceled: true)));
